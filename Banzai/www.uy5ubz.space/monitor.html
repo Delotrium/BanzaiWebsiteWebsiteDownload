@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="uk">
+
+<!-- Mirrored from www.uy5ubz.space/monitor by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 03 Oct 2025 10:40:37 GMT -->
+<!-- Added by HTTrack --><meta http-equiv="content-type" content="text/html;charset=utf-8" /><!-- /Added by HTTrack -->
+<head>
+    <meta charset="UTF-8">
+    <title>Моніторинг обладнання — Радіоблог Сталкера</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<!-- Google tag (gtag.js) -->
+<script async src="https://www.googletagmanager.com/gtag/js?id=G-81DZ2N1KDJ"></script>
+<script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    gtag('config', 'G-81DZ2N1KDJ');
+</script>
+<body>
+    <div class="container">
+    <header>
+    <div class="status-box">
+        <div class="status-header">
+            <img src="static/images/signal.gif" alt="signal">
+            <h1>Радіоблог сталкера "Банзай"</h1>
+        </div>
+    </div>
+    <nav>
+        <img style="height: 24px; float: left;" src="static/images/radioactive.gif" alt="radioactive">
+        <a href="index.html">Головна </a> |
+        <a href="blog.html">Блог</a>
+        <img style="height: 24px; float: right;" src="static/images/radioactive.gif" alt="radioactive">
+    </nav>
+</header>
+
+    <main>
+<h2>Система моніторингу "Ворон"</h2>
+
+<div class="monitor-grid">
+    <div class="sensor" data-id="1">
+        <h3>Радіаційний фон</h3>
+        <div class="value" id="radiation">--</div>
+        <div class="unit">мкЗ/год</div>
+    </div>
+
+    <div class="sensor" data-id="2">
+        <h3>Пси-активність</h3>
+        <div class="value" id="psi">--</div>
+        <div class="unit">од.</div>
+    </div>
+
+    <div class="sensor" data-id="3">
+        <h3>Аномальна частота</h3>
+        <div class="value" id="anomaly">--</div>
+        <div class="unit">Гц</div>
+    </div>
+
+    <div class="sensor" data-id="4">
+        <h3>Напруга</h3>
+        <div class="value" id="voltage">--</div>
+        <div class="unit">В</div>
+    </div>
+</div>
+
+<div class="messages-section">
+    <div class="messages-container" id="messages-container">
+        <div class="message-placeholder">
+            Очікування повідомлень...
+        </div>
+    </div>
+</div>
+
+<div class="status">
+    Статус системи: <span id="status">ПІДКЛЮЧЕННЯ...</span>
+    
+        <img src="static/images/point_off.gif" alt="radio" class="icon-emoji"> 
+    
+</div>
+
+
+<h3>Статус зовнішніх ресурсів</h3>
+<table cellpadding="5" cellspacing="0" style="border-color: #333;" id="services-panel">
+</table>
+
+<script>
+const socket = new WebSocket(`wss://${window.location.host}/ws/monitor`);
+
+socket.onerror = function(event) {
+    console.error(event.message);
+}
+
+socket.onmessage = function(event) {
+    const data = JSON.parse(event.data);
+
+    if (data.error) {
+        console.error(`[${data.code}] ${data.error}`)
+        return
+    }
+
+    if (data.sensors) {
+        document.getElementById('radiation').textContent = data.sensors.radiation;
+        document.getElementById('psi').textContent = data.sensors.psi;
+        document.getElementById('anomaly').textContent = data.sensors.anomaly;
+        document.getElementById('voltage').textContent = data.sensors.voltage;
+    }
+
+    if (!window.serviceRowsCache) {
+        initializeServiceTable(data.services);
+    } else {
+        updateServiceTable(data.services);
+    }
+
+    document.getElementById('status').textContent = 'АКТИВНА';
+    document.getElementById('status').style.color = 'lime';
+
+    if (data.message) {
+        updateMessage(data.message);
+    }
+};
+
+function initializeServiceTable(services) {
+    const srv_panel = document.getElementById('services-panel');
+    srv_panel.innerHTML = `<tr><th>Ресурс</th><th>Статус</th><th>Пінг</th></tr>`;
+    
+    window.serviceRowsCache = {};
+    
+    services.forEach((service, index) => {
+        const row = document.createElement('tr');
+        row.innerHTML = `
+            <td>${service.name}</td>
+            <td class="status-cell">${service.status}</td>
+            <td class="ping-cell">${service.ping}</td>
+        `;
+        
+        srv_panel.appendChild(row);
+        
+        window.serviceRowsCache[service.name] = {
+            statusCell: row.querySelector('.status-cell'),
+            pingCell: row.querySelector('.ping-cell')
+        };
+        
+        updateRowStyle(row, service.status);
+    });
+}
+
+function updateServiceTable(services) {
+    services.forEach(service => {
+        if (window.serviceRowsCache[service.name]) {
+            const cache = window.serviceRowsCache[service.name];
+            cache.statusCell.textContent = service.status;
+            cache.pingCell.textContent = service.ping;
+            cache.statusCell.style.color = getStatusColor(service.status);
+        }
+    });
+}
+
+function getStatusColor(status) {
+    switch (status) {
+        case 'OFFLINE': return 'gray';
+        case 'UNSTABLE': return 'orange';
+        case 'RESTRICTED': return 'red';
+        default: return 'black';
+    }
+}
+
+function updateRowStyle(row, status) {
+    const statusCell = row.querySelector('.status-cell');
+    statusCell.style.color = getStatusColor(status);
+}
+
+socket.onclose = function() {
+    document.getElementById('status').textContent = 'ВІДКЛЮЧЕНО';
+    document.getElementById('status').style.color = 'red';
+};
+
+function updateMessage(message) {
+    const container = document.getElementById('messages-container');
+
+    if (message.length === 0) {
+        container.innerHTML = '<div class="message-placeholder">Очікування повідомлень...</div>';
+        return;
+    }
+
+    html = `
+        <div class="message message-${message.type}">
+            <span class="message-time">[${message.timestamp}]</span>
+            <span class="message-text">${message.text}</span>
+        </div>
+    `;
+    
+    container.insertAdjacentHTML('afterbegin', html);
+}
+
+document.querySelectorAll('.sensor').forEach(sensor => {
+    sensor.ondblclick = async function() {
+        const id = this.dataset.id;
+        const container = document.getElementById('messages-container');
+
+        try {
+            const response = await fetch(`/api/sensor/${id}`, {
+                method: 'POST',
+                headers: {
+                    'Accept': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            message = await response.json();
+
+            if (message.status == 'error') {
+                throw alert(`${message.text}`);
+            }
+
+            updateMessage(message);
+        } catch (error) {
+            console.error('Помилка при отриманні даних:', error);
+        }
+    };
+});
+</script>
+</main>
+
+    <footer>
+    <p>© Зона відчуження. Усі права... ну ви зрозуміли.</p>
+    <div>
+        <p>Відвідувачів:</p>
+        <p><span class="number" style="--c:#19191f;--g:4px;--w:1ch;font-size:1.2rem;">10028</span></p>
+    </div>
+</footer>
+    </div>
+</body>
+
+<!-- Mirrored from www.uy5ubz.space/monitor by HTTrack Website Copier/3.x [XR&CO'2014], Fri, 03 Oct 2025 10:40:37 GMT -->
+</html>
